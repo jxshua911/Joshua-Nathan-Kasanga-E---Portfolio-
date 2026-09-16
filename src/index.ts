@@ -1,19 +1,21 @@
 import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { connect, type Framer } from "framer-api";
+import { connect } from "framer-api";
 import { z } from "zod";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const PROJECT_URL = process.env.FRAMER_PROJECT_URL;
 const API_KEY = process.env.FRAMER_API_KEY;
 
+type FramerClient = Awaited<ReturnType<typeof connect>>;
+
 function assertConfig() {
   if (!PROJECT_URL) throw new Error("FRAMER_PROJECT_URL is not configured");
   if (!API_KEY) throw new Error("FRAMER_API_KEY is not configured");
 }
 
-async function withFramer<T>(fn: (framer: Framer) => Promise<T>): Promise<T> {
+async function withFramer<T>(fn: (framer: FramerClient) => Promise<T>): Promise<T> {
   assertConfig();
   const framer = await connect(PROJECT_URL!, API_KEY!);
   try {
@@ -45,9 +47,7 @@ function makeServer() {
         return { project, publish };
       });
 
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -60,9 +60,7 @@ function makeServer() {
     },
     async () => {
       const result = await withFramer((framer) => framer.getChangedPaths());
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -78,9 +76,7 @@ function makeServer() {
     async ({ confirm }) => {
       if (confirm !== true) throw new Error("Explicit confirmation is required.");
       const result = await withFramer((framer) => framer.publish());
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
 
@@ -112,7 +108,8 @@ const httpServer = createServer(async (req, res) => {
 
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(Buffer.from(chunk));
-  const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : undefined;
+  const rawBody = Buffer.concat(chunks).toString("utf8");
+  const body = rawBody ? JSON.parse(rawBody) : undefined;
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
